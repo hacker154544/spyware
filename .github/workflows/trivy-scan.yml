@@ -1,0 +1,34 @@
+name: Trivy Scan
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  security_scan:
+    name: Run Trivy Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repository code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Run Trivy GitHub Action
+      - name: Run Trivy Scan
+        uses: aquasecurity/trivy-action@v0.11.0
+        with:
+          scan-type: 'fs'  # File System scan
+          severity: 'CRITICAL,HIGH'  # Filter vulnerabilities by severity
+          format: 'table'  # Output format: table or json
+          ignore-unfixed: true  # Exclude vulnerabilities with no fixes
+
+      # (Optional) Upload the scan result as an artifact if using JSON format
+      - name: Upload Trivy report
+        if: success()
+        uses: actions/upload-artifact@v3
+        with:
+          name: trivy-report
+          path: trivy-report.json
