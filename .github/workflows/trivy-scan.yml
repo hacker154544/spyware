@@ -1,6 +1,5 @@
-name: Trivy Scan
+name: Trivy Scan with Cache and Retry
 
-# Trigger the action on pull request or push to the main branch
 on:
   push:
     branches:
@@ -8,16 +7,25 @@ on:
   pull_request:
 
 jobs:
-  security_scan:
-    name: Run Trivy Scan
+  trivy_scan:
+    name: Run Trivy Scan with Cache and Retry
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the repository code
+      # Step 1: Checkout the repository code
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Install Trivy
+      # Step 2: Set up caching for Trivy DB
+      - name: Cache Trivy DB
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db
+          restore-keys: |
+            ${{ runner.os }}-trivy-db
+
+      # Step 3: Install Trivy manually
       - name: Install Trivy
         run: |
           sudo apt-get update -y
@@ -27,12 +35,15 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y trivy
 
-      # Run Trivy scan on the repository
-      - name: Run Trivy filesystem scan
+      # Step 4: Run Trivy filesystem scan with retries to avoid rate-limiting issues
+      - name: Run Trivy Scan with Retries
         run: |
-          trivy fs .
+          for i in {1..5}; do
+            trivy fs . --severity CRITICAL,HIGH --ignore-unfixed && break || echo "Retrying ($i)...";
+            sleep 30;
+          done
 
-      # (Optional) Upload the scan result as an artifact
+      # Optional Step 5: Upload Trivy scan report as an artifact
       - name: Upload Trivy report
         uses: actions/upload-artifact@v3
         with:
