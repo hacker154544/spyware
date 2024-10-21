@@ -1,4 +1,4 @@
-name: Trivy Scan with Cache and Retry
+name: Build and Trivy Scan
 
 on:
   push:
@@ -7,45 +7,27 @@ on:
   pull_request:
 
 jobs:
-  trivy_scan:
-    name: Run Trivy Scan with Cache and Retry
-    runs-on: ubuntu-latest
+  build:
+    name: Build and Trivy Scan
+    runs-on: ubuntu-20.04
 
     steps:
-      # Step 1: Checkout the repository code
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      # Step 1: Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # Step 2: Set up caching for Trivy DB
-      - name: Cache Trivy DB
-        uses: actions/cache@v3
+      # Step 2: Run Trivy vulnerability scanner and generate a JSON output
+      - name: Run Trivy Scan
+        uses: aquasecurity/trivy-action@v0.20.0
         with:
-          path: ~/.cache/trivy
-          key: ${{ runner.os }}-trivy-db
-          restore-keys: |
-            ${{ runner.os }}-trivy-db
+          scan-type: 'fs'  # File system scan
+          severity: 'CRITICAL,HIGH'  # Focus on CRITICAL and HIGH vulnerabilities
+          format: 'json'  # Generate output in JSON format
+          output: 'trivy_result.json'  # Output file name for the scan results
 
-      # Step 3: Install Trivy manually
-      - name: Install Trivy
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update -y
-          sudo apt-get install -y trivy
-
-      # Step 4: Run Trivy filesystem scan with retries to avoid rate-limiting issues
-      - name: Run Trivy Scan with Retries
-        run: |
-          for i in {1..5}; do
-            trivy fs . --severity CRITICAL,HIGH --ignore-unfixed && break || echo "Retrying ($i)...";
-            sleep 30;
-          done
-
-      # Optional Step 5: Upload Trivy scan report as an artifact
+      # Step 3: Upload the Trivy scan report as an artifact
       - name: Upload Trivy report
         uses: actions/upload-artifact@v3
         with:
           name: trivy-report
-          path: trivy-report.json
+          path: trivy_result.json
