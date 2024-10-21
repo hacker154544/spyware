@@ -1,5 +1,6 @@
 name: Trivy Scan
 
+# Trigger the action on pull request or push to the main branch
 on:
   push:
     branches:
@@ -16,18 +17,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Run Trivy GitHub Action
-      - name: Run Trivy Scan
-        uses: aquasecurity/trivy-action@v0.11.0
-        with:
-          scan-type: 'fs'  # File System scan
-          severity: 'CRITICAL,HIGH'  # Filter vulnerabilities by severity
-          format: 'table'  # Output format: table or json
-          ignore-unfixed: true  # Exclude vulnerabilities with no fixes
+      # Install Trivy
+      - name: Install Trivy
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -y
+          sudo apt-get install -y trivy
 
-      # (Optional) Upload the scan result as an artifact if using JSON format
+      # Run Trivy scan on the repository
+      - name: Run Trivy filesystem scan
+        run: |
+          trivy fs .
+
+      # (Optional) Upload the scan result as an artifact
       - name: Upload Trivy report
-        if: success()
         uses: actions/upload-artifact@v3
         with:
           name: trivy-report
